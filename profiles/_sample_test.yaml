@@ -1,0 +1,90 @@
+# ── Tallmadge Sample Profile — Test ───────────────────────────────────────────
+# Starting point: send prompts to the agent and collect results.
+# Optionally daisy-chain into Compare and/or Render at the end of the run.
+#
+# Run with:  python main.py --profile profiles/_sample_test.yaml
+#
+# Tip: any value can reference an environment variable using ${VAR_NAME}.
+# Example:  base_url: ${MSTR_BASE_URL}
+#
+# Password is never stored in profiles.
+# Set the MSTR_PASSWORD environment variable before running.
+# ──────────────────────────────────────────────────────────────────────────────
+
+function: test
+
+# true  — show each prompt with the profile value pre-filled; user can override
+# false — skip all prompts and run fully unattended
+interactive: true
+
+
+# ── Data Collection ────────────────────────────────────────────────────────────
+
+# api        — REST API (most common)
+# mcp-agent  — MCP Agent connector  (connector name configured in settings.py)
+# mcp-mosaic — MCP Mosaic connector
+run_mode: api
+
+# settings — use the PROMPTS list in config/settings.py
+# file     — load from a plain text file (one prompt per line; blank lines ignored)
+prompts_source: settings
+# prompts_file: prompts/my_prompts.txt   # required when prompts_source is file
+
+# How to handle sorry / rephrasing responses from the agent.
+# stop      — log and exit the run immediately
+# continue  — record the sorry and move on to the next prompt
+# resubmit  — resend the prompt up to sorry_retries times, then continue
+on_sorry: resubmit
+sorry_retries: 1   # 0–3; only used when on_sorry is resubmit
+
+
+# ── MSTR Connection ────────────────────────────────────────────────────────────
+
+mstr:
+  base_url:   https://your-server/MicroStrategyLibrary
+  agent_id:   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX   # 32-character hex GUID
+  project_id: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX   # 32-character hex GUID
+  username:   your_username
+  # 1 = Standard | 16 = LDAP | 4096 = API Token
+  login_mode: 1
+
+
+# ── Compare (optional daisy-chain) ─────────────────────────────────────────────
+
+# Set to false to skip comparison entirely and go straight to render (or end).
+compare_enabled: true
+
+# Path to the file to compare the new results against.
+# JSON results file = baseline comparison
+# Excel file        = gold standard comparison (expected values + optional SQL)
+compare_file: results/results_20260101_120000.json
+
+# Requires gold standard Excel with a SQL column.
+# Uses Anthropic API tokens — set ANTHROPIC_API_KEY before running.
+sql_comparison_enabled: true
+
+# Generate CI improvement suggestions after comparison.
+ci_improvement_enabled: true
+ci_file: path/to/custom_instructions.txt   # CI text file used during this test run
+
+
+# ── Render (optional daisy-chain) ──────────────────────────────────────────────
+
+# Set to false to skip rendering.
+render_enabled: true
+
+style:
+  # saved — use a named style from STYLES in config/settings.py
+  # url   — fetch brand colours from a URL at runtime
+  # json  — provide a JSON object directly
+  source: saved
+  key: corporate   # name of the style in STYLES (when source is saved)
+
+render:
+  # pptx | xlsx | web
+  format: xlsx
+  # detail | wide | both — xlsx only; ignored for pptx and web
+  #   detail — summary + one detail sheet per prompt
+  #   wide   — summary + wide-view sheet + one data sheet per prompt (gridData)
+  #   both   — summary + wide-view sheet + one detail sheet per prompt
+  xlsx_layout: detail

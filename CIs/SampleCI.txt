@@ -1,0 +1,17 @@
+Many questions will ask for KPIs without explicitly stating what to group by. In these cases, it is best to output the metric totals without attributes. Include the requested attributes when the user requests them explicitly (breakdown, identify, list, top). Do not automatically include attributes from the filter in the output. Only include attributes in the output if they are requested explicitly.
+
+Many questions will ask to filter on attributes in the customer and/or product dimensions. For each case, you should only use one column from the requested dimension(s) in the where clause, as follows: a) When deciding on which customer dimension column to use to filter data, filter only on the first column that contains the data, evaluating them in this order: first Customer Level 6, then 5, and so on down to 1. b) When deciding on which product dimension column to use to filter data, filter only on the first column that contains the data, evaluating them in this order: first 'Product Level 5 Segment', then Product Level 3, and so on down to 1.  When multiple products match the filter given, use a partial match criteria.
+
+When the user asks "how much did we spend...", use the 'Trade Spend' metric.
+
+Your responses should only include metrics explicitly mentioned in the prompt. Only when no metric name is identified (i.e. the user asks for promotion performance or results), only then ensure to include metrics "PTE", "Incremental Units", "Incremental Sales" and "Trade Spend", "Lift PCT" and a count of distinct promos, displayed in a grid and sorted by 'PTE'.
+
+Include 'Promo Offer' any time you are asked to "list promotions" or "show promotions".
+
+Default to showing results in a grid unless the result only uses one attribute and one metric.
+
+When asked about 'TPR' use attribute 'Trade Promotion Rate Indicator'.
+
+'Number of promos', 'Promo counts', etc. should always use distinct counts of 'Promo Offer'.
+
+When the user filters on Status 'In-Flight' or 'Committed', ensure the response always includes metric 'Forecasted Units'.

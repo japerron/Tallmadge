@@ -1,0 +1,211 @@
+# config/scoring.yaml — Tallmadge scoring rules and Claude prompts
+#
+# Edit rates, caps, and prompt text here.
+# Python reads this file once at startup; restart Tallmadge to pick up changes.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# CAUTION — sql_scoring.system_prompt
+#   The response-format block (MISSING_ATTRS: <n> … EXPLANATION: …) is parsed
+#   by sql_judge.py with exact label matching.  If you rename a label the
+#   corresponding count will silently come back as 0.  Change those labels only
+#   if you also update the _PARSE_RE patterns in core/sql_judge.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ── Field scoring (expected.py) ───────────────────────────────────────────────
+# Applied per prompt when comparing agent output against the gold standard Excel.
+# Each *_rate is a deduction per issue; each *_cap is the max issues charged.
+
+field_scoring:
+  score_max: 5.0
+
+  where:
+    major_rate: 1.5    # column absent from actual, or same col + non-cosmetic value diff
+    major_cap:  2      # max issues charged  →  max deduction 3.0
+    minor_rate: 0.25   # same col, LIKE-family ↔ = operator change (waived when major > 0)
+    minor_cap:  2
+    extra_rate: 1.5    # extra token in actual not in gold
+    extra_cap:  2
+
+  attributes:
+    missing_rate: 1.5
+    missing_cap:  2
+    extra_rate:   1.0
+    extra_cap:    2
+
+  metrics:
+    missing_rate: 1.0
+    missing_cap:  3
+    extra_rate:   0.25
+    extra_cap:    2
+
+  rows:
+    deduction: 1.0     # flat penalty when actual row count ≠ expected
+
+  having:
+    major_rate: 0.5
+    major_cap:  2
+    minor_rate: 0.25
+    minor_cap:  2
+    extra_rate: 0.5
+    extra_cap:  2
+
+  other_used:
+    missing_rate: 0.5
+    missing_cap:  2
+
+
+# ── SQL scoring (sql_judge.py) ────────────────────────────────────────────────
+# Independent 0–5 scale applied when Claude compares generated SQL against
+# the gold-standard SQL.  Does NOT affect the field score above.
+#
+# deduct_rates format: [rate_per_issue, max_issues_charged]
+
+sql_scoring:
+
+  deduct_rates:
+    missing_attrs:   [1.5, 2]   # max 3.0 — gold attributes absent from actual SQL
+    extra_attrs:     [1.0, 2]   # max 2.0 — extra attributes in actual SQL not in gold
+    missing_metrics: [1.0, 3]   # max 3.0 — gold metric absent from actual SQL
+    major_filters:   [1.5, 2]   # max 3.0 — different filter column or value
+    other_major:     [1.5, 2]   # max 3.0 — windowing absent; COUNT DISTINCT vs other agg
+    other:           [0.5, 2]   # max 1.0 — ORDER BY / HAVING / LIMIT differences
+    added_metrics:   [0.25, 2]  # max 0.5 — extra metrics (least severe)
+    minor_filters:   [0.25, 2]  # max 0.5 — cosmetic-only filter differences
+
+  system_prompt: |
+    You are an expert SQL evaluator for a business intelligence reporting system. Your task is to compare two SQL queries — a gold-standard and an actual query — and determine whether they are semantically equivalent given the same underlying data.
+
+    Focus on what matters for correctness:
+      • Filter conditions (WHERE, HAVING)
+      • Selected columns and aggregations (SUM, COUNT, AVG, etc.)
+      • Grouping (GROUP BY) and sort order (ORDER BY)
+      • Row limits (TOP / LIMIT / FETCH FIRST)
+      • Ranking logic (RANK OVER, DENSE_RANK, ROW_NUMBER OVER)
+
+    Ignore cosmetic differences that do not affect results:
+      • Column and table names have been pre-normalised — identical quoted identifiers
+        refer to the same column or table regardless of original formatting.
+      • Aliases are cosmetic — when an alias appears in both SELECT and ORDER BY or HAVING,
+        compare the underlying SELECT expression, not the alias name. Different alias names
+        for the same expression (e.g. AS "revenue" vs AS "totalrevenue", both wrapping
+        SUM("revenue")) are not a difference.
+      • Aggregation on non-aggregating CTEs/subqueries — if a CTE or subquery in the FROM
+        clause is defined as a plain SELECT with no GROUP BY and no aggregation in its body,
+        each outer-query group contains exactly one row. In that case SUM, AVG, MIN, and MAX
+        on the same column all produce the same result and must NOT be counted as differences
+        in any category. COUNT is excluded from this equivalence (it returns 1, not the value).
+      • Whitespace, indentation, capitalisation
+      • Logically equivalent expressions: 'col = 1' vs 'col IN (1)',
+        'YEAR(date) = 2024' vs "date BETWEEN '2024-01-01' AND '2024-12-31'"
+
+    Respond using EXACTLY this format (no other text):
+    MISSING_ATTRS: <n>
+    EXTRA_ATTRS: <n>
+    MISSING_METRICS: <n>
+    MAJOR_FILTERS: <n>
+    OTHER_MAJOR: <n>
+    OTHER: <n>
+    MINOR_FILTERS: <n>
+    ADDED_METRICS: <n>
+    MISSING_ATTRS_DETAIL: <comma-separated list of attribute names, or 'none'>
+    EXTRA_ATTRS_DETAIL: <comma-separated list of attribute names, or 'none'>
+    MISSING_METRICS_DETAIL: <comma-separated list of metric names, or 'none'>
+    MAJOR_FILTERS_DETAIL: <concise description of each filter difference, or 'none'>
+    OTHER_MAJOR_DETAIL: <concise description of each windowing or COUNT DISTINCT difference, or 'none'>
+    OTHER_DETAIL: <concise description of each HAVING/ORDER BY/LIMIT difference, or 'none'>
+    MINOR_FILTERS_DETAIL: <concise description of each cosmetic filter difference, or 'none'>
+    ADDED_METRICS_DETAIL: <comma-separated list of metric names, or 'none'>
+    EXPLANATION: <one concise sentence>
+
+    Count definitions (use 0 when not applicable):
+      MISSING_ATTRS   — attributes present in the gold SQL that are absent from the actual SQL,
+                        making the result less granular than expected;
+                        includes GROUP BY columns removed in the actual SQL
+      EXTRA_ATTRS     — attributes present in the actual SQL that are absent from the gold SQL,
+                        adding unwanted grouping (more granular than gold);
+                        includes GROUP BY columns added in the actual SQL
+      MISSING_METRICS — metrics in the gold SQL absent from the actual SQL
+      MAJOR_FILTERS   — any of the following, each counts as one issue:
+                        • different column used to filter (e.g. gold filters on Customer Group,
+                          actual filters on Customer)
+                        • same column but substantially different value (e.g. wrong year, wrong entity)
+                        • same column but semantically different operator (e.g. = vs !=, = vs >=)
+                        • a filter condition present in the gold SQL is entirely absent from actual
+                          (missing filter — returns more rows than intended)
+                        • a filter condition present in actual SQL is entirely absent from gold
+                          (extra filter — over-restricts the result set)
+                        CROSS-COLUMN SUBSTITUTION — when the same operator AND value appear on
+                        a DIFFERENT column (e.g. gold: ProductLevel2 LIKE '%coffee%',
+                        actual: ProductLevel5 LIKE '%coffee%'), count this as ONE MAJOR_FILTERS
+                        issue, NOT as both a missing filter and an extra filter;
+                        do NOT count partial-match vs exact-match differences here
+                        (e.g. LIKE vs = on the same column) UNLESS the values are semantically
+                        incompatible — see MINOR_FILTERS for the value-compatibility rule;
+                        when agent behavior context is provided, consult it for filter column
+                        hierarchies — if the actual SQL uses a related column from the same
+                        hierarchy as the gold SQL (e.g. Brand vs Brand Family, Customer vs
+                        Customer Group), do not penalise as MAJOR_FILTERS if the agent
+                        instructions indicate this substitution is acceptable or expected
+      OTHER_MAJOR     — windowing functions present in the gold SQL but absent from the actual SQL
+                        (e.g. RANK() OVER, DENSE_RANK() OVER, ROW_NUMBER() OVER, NTILE() OVER);
+                        also includes cases where the gold SQL uses COUNT(DISTINCT ...) and the
+                        actual SQL uses any other aggregation for the same expression
+      OTHER           — differences in HAVING clauses (always count);
+                        ORDER BY: NEVER penalise an ORDER BY that appears in the actual SQL
+                        but is absent from the gold SQL — the gold SQL will already have any
+                        ORDER BY removed by Python when the gold has none, so if you see an
+                        ORDER BY only in the actual SQL, treat it as zero differences.
+                        Only consider an ORDER BY difference when both SQLs contain an ORDER BY
+                        clause AND the actual SQL contradicts the gold in a way that changes the
+                        business answer.
+                        LIMIT/TOP: only penalise when the business question explicitly requires
+                        a specific row count (e.g. 'top 10', 'top 5', 'top 25') and the actual
+                        uses a substantially different limit. Do NOT penalise large round-number
+                        limits (e.g. LIMIT 100, LIMIT 1000, LIMIT 10000) — these are default
+                        safety/pagination limits, not meaningful business constraints.
+                        IMPORTANT: do NOT count in OTHER any difference already counted
+                        in MISSING_ATTRS, EXTRA_ATTRS (including GROUP BY), MISSING_METRICS,
+                        MAJOR_FILTERS, OTHER_MAJOR, MINOR_FILTERS, or ADDED_METRICS —
+                        each difference belongs to exactly one category
+      MINOR_FILTERS   — cosmetic-only filter differences (case, spacing, logically equivalent syntax);
+                        also includes partial-match vs exact-match on the same filter column
+                        (e.g. LIKE, CONTAINS, ILIKE vs = or IN) when values are semantically compatible:
+                        strip % wildcards from the LIKE value and check whether the stripped value
+                        is a substring of the = value (or vice versa, take the shorter);
+                        if compatible (e.g. LIKE '%supermart%' vs = 'SuperMart Inc.') → MINOR_FILTERS;
+                        if incompatible (e.g. LIKE '%supermart%' vs = 'Walmart Inc.') → MAJOR_FILTERS
+      ADDED_METRICS   — metrics in the actual SQL not present in the gold SQL
+
+    Detail field instructions (write 'none' when the corresponding count is 0):
+      MISSING_ATTRS_DETAIL   — list each missing attribute by name
+      EXTRA_ATTRS_DETAIL     — list each extra attribute by name
+      MISSING_METRICS_DETAIL — list each missing metric by name
+      MAJOR_FILTERS_DETAIL   — describe each major filter difference
+                               (e.g. 'gold filters on Customer Group; actual filters on Customer')
+      OTHER_MAJOR_DETAIL     — describe each windowing or COUNT DISTINCT difference
+                               (e.g. 'gold uses RANK() OVER ...; actual omits windowing')
+      OTHER_DETAIL           — describe each HAVING/ORDER BY/LIMIT difference
+                               (e.g. 'gold ORDER BY Revenue DESC; actual ORDER BY Date ASC')
+      MINOR_FILTERS_DETAIL   — describe each cosmetic filter difference
+      ADDED_METRICS_DETAIL   — list each added metric by name
+    Use original display names from the identifier reference (if provided), not normalised keys.
+
+
+# ── CI Advisor (ci_advisor.py) ────────────────────────────────────────────────
+# max_chars is referenced both here (as a limit applied in code) and in the
+# system_prompt text below — if you change max_chars, update the prompt too.
+
+ci_advisor:
+  max_chars: 5000
+
+  system_prompt: |
+    You are an expert prompt engineer specialising in business intelligence agents. You will receive:
+      1. A set of Custom Instructions (CI) currently used to guide an AI analytics agent when it
+         interprets user questions and generates SQL — or a note that no CI exists yet.
+      2. A list of test prompts that the agent answered incorrectly, together with the specific
+         mistakes it made (wrong WHERE filters, missing or extra attributes/metrics).
+
+    Your task: if a CI is provided, rewrite it to correct the mistakes while preserving everything
+    that already works. If no CI exists yet, create one from scratch that would prevent the observed
+    mistakes. Keep the CI under 5000 characters. Output only the CI text.

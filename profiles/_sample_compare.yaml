@@ -1,0 +1,58 @@
+# ── Tallmadge Sample Profile — Compare ────────────────────────────────────────
+# Starting point: compare two existing files without running a new test.
+# Requires two file paths: the results to compare FROM and the target to compare AGAINST.
+#
+# Run with:  python main.py --profile profiles/_sample_compare.yaml
+#
+# Tip: any value can reference an environment variable using ${VAR_NAME}.
+# ──────────────────────────────────────────────────────────────────────────────
+
+function: compare
+
+# true  — show each prompt with the profile value pre-filled; user can override
+# false — skip all prompts and run fully unattended
+interactive: true
+
+
+# ── Input Files ────────────────────────────────────────────────────────────────
+
+# The results file to compare FROM — a JSON file from a previous Tallmadge test run.
+results_file: results/results_20260101_120000.json
+
+# The file to compare AGAINST.
+# JSON results file = baseline comparison   (compares two test runs side by side)
+# Excel file        = gold standard comparison  (compares against expected values)
+compare_file: path/to/gold_standard.xlsx
+
+
+# ── Comparison Options ─────────────────────────────────────────────────────────
+
+# Requires gold standard Excel with a SQL column.
+# Uses Anthropic API tokens — set ANTHROPIC_API_KEY before running.
+sql_comparison_enabled: true
+
+# Generate CI improvement suggestions after comparison.
+ci_improvement_enabled: true
+ci_file: path/to/custom_instructions.txt   # CI text file used during the original test run
+
+
+# ── Render (optional daisy-chain) ──────────────────────────────────────────────
+
+# Set to false to skip rendering.
+render_enabled: true
+
+style:
+  # saved — use a named style from STYLES in config/settings.py
+  # url   — fetch brand colours from a URL at runtime
+  # json  — provide a JSON object directly
+  source: saved
+  key: corporate   # name of the style in STYLES (when source is saved)
+
+render:
+  # pptx | xlsx | web
+  format: xlsx
+  # detail | wide | both — xlsx only; ignored for pptx and web
+  #   detail — summary + one detail sheet per prompt
+  #   wide   — summary + wide-view sheet + one data sheet per prompt (gridData)
+  #   both   — summary + wide-view sheet + one detail sheet per prompt
+  xlsx_layout: detail

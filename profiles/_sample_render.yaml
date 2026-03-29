@@ -1,0 +1,39 @@
+# ── Tallmadge Sample Profile — Render ─────────────────────────────────────────
+# Starting point: render an existing results file to pptx, xlsx, or web.
+# Requires one file path: the results JSON to render.
+#
+# Run with:  python main.py --profile profiles/_sample_render.yaml
+#
+# Tip: any value can reference an environment variable using ${VAR_NAME}.
+# ──────────────────────────────────────────────────────────────────────────────
+
+function: render
+
+# true  — show each prompt with the profile value pre-filled; user can override
+# false — skip all prompts and run fully unattended
+interactive: true
+
+
+# ── Input File ─────────────────────────────────────────────────────────────────
+
+# The results JSON file to render — from a previous Tallmadge test run.
+results_file: results/results_20260101_120000.json
+
+
+# ── Output ─────────────────────────────────────────────────────────────────────
+
+style:
+  # saved — use a named style from STYLES in config/settings.py
+  # url   — fetch brand colours from a URL at runtime
+  # json  — provide a JSON object directly
+  source: saved
+  key: corporate   # name of the style in STYLES (when source is saved)
+
+render:
+  # pptx | xlsx | web
+  format: xlsx
+  # detail | wide | both — xlsx only; ignored for pptx and web
+  #   detail — summary + one detail sheet per prompt
+  #   wide   — summary + wide-view sheet + one data sheet per prompt (gridData)
+  #   both   — summary + wide-view sheet + one detail sheet per prompt
+  xlsx_layout: detail

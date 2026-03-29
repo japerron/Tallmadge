@@ -1,0 +1,3 @@
+Show me the top 10 promotions for Supermart in 2026 by incremental sales
+What was the total trade spend for coffee promotions at ACME this year?
+How are promotions for kcup performing at SuperMart this year?

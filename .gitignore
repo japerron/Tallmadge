@@ -1,0 +1,27 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Temp / lock files (Office open locks, etc.)
+~$*
+
+# Backup files
+*.bak
+
+# Generated outputs (keep .gitkeep, ignore actual files)
+output/*
+!output/.gitkeep
+
+# Session state
+config/last_run.json
+
+# Large intro deck (12 MB — share separately)
+tallmadge_intro.pptx
+
+# Environment / secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
